@@ -1,0 +1,16 @@
+name = "wps-hub-v3"
+main = "worker.js"
+compatibility_date = "2025-04-01"
+account_id = "a6f47c17811ee2f8b6caeb8f38768c20"
+workers_dev = true
+
+[[d1_databases]]
+binding = "WPS_DB"
+database_name = "wps-hub-db"
+database_id = "d89d5e1b-a9b0-49ad-800d-0cee8f2925b3"
+
+# WPS_ADMIN_PIN is set as a secret out-of-band:
+#   echo 9999 | wrangler secret put WPS_ADMIN_PIN
+
+# Custom domain wps.carnivaltiming.com is bound via the Workers Domains UI/API,
+# not as a [[routes]] entry. To re-bind: dash → Workers → wps-hub-v3 → Triggers → Add Custom Domain.
