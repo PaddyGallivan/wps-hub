@@ -11,7 +11,7 @@ A single-file PWA + Cloudflare Worker + D1 backend. iDoceo-style classroom manag
 | `index.html` | The whole frontend. ~71 KB, vanilla JS, no framework, registers a service worker. All API calls are relative (`/api/*`) so it works on any domain. |
 | `worker.js` | Cloudflare Worker. Serves `index.html` at any non-`/api/*` path; handles `/api/*` against D1 (`WPS_DB`) and a secret PIN (`WPS_ADMIN_PIN`). |
 | `wrangler.toml` | CF deploy config. Binding: D1 `wps-hub-db` (uuid `d89d5e1b-a9b0-49ad-800d-0cee8f2925b3`). Secret is set out-of-band. |
-| `.github/workflows/deploy.yml` | Auto-deploys to Cloudflare on push to `main`. Needs `CF_API_TOKEN` repo secret. |
+| `docs/github-actions-deploy.yml` | Template GH Actions workflow. To enable auto-deploy, copy to `.github/workflows/deploy.yml` from a token with `workflow` scope, or connect this repo via the Cloudflare dashboard → Workers → wps-hub-v3 → Settings → Build (CF Workers Builds, no PAT needed). |
 
 ## Architecture
 
@@ -71,9 +71,29 @@ wrangler deploy
 echo "9999" | wrangler secret put WPS_ADMIN_PIN
 ```
 
-After that, every push to `main` auto-deploys via GitHub Actions.
+Auto-deploy is **not yet wired** — see the deploy section below.
 
 To bind a custom domain: CF dash → Workers → `wps-hub-v3` → Triggers → Add Custom Domain.
+
+
+
+### Wiring auto-deploy
+
+Two paths, pick one:
+
+**Option A — Cloudflare Workers Builds** (simplest, no GitHub PAT scope needed)
+1. CF dash → Workers & Pages → `wps-hub-v3` → Settings → **Builds**
+2. Connect GitHub → authorise `LuckDragonAsgard/wps-hub`
+3. Build command: leave blank. Deploy command: `wrangler deploy`. Branch: `main`.
+4. Save. Every push triggers a build.
+
+**Option B — GitHub Actions** (needs a PAT with `workflow` scope)
+1. Create a fine-grained PAT with `Actions: Read+Write` and `Contents: Read+Write` for this repo.
+2. Add it as repo secret `CF_API_TOKEN`.
+3. `cp docs/github-actions-deploy.yml .github/workflows/deploy.yml` from a clone, push.
+4. Every push triggers a build.
+
+Until either is wired, deploy manually with `wrangler deploy` from a checkout.
 
 ## Recovery history
 
