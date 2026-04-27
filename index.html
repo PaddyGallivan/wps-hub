@@ -563,7 +563,7 @@ async function doSignIn(){
   if(!email){toast('Enter your email','⚠️');return;}
   let role='teacher';
   if(isAdmin){
-    const res=await fetch('https://wps-staff-hub.pgallivan.workers.dev/api/auth/verify-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin,email})});
+    const res=await fetch('/api/auth/verify-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin,email})});
     const d=await res.json();
     if(!d.ok){toast('Incorrect admin PIN','❌');return;}
     role='admin';
@@ -589,9 +589,9 @@ function signOut(){
 async function syncAll(){
   try{
     const[tt,notices,bells]=await Promise.all([
-      fetch('https://wps-staff-hub.pgallivan.workers.dev/api/timetable').then(r=>r.json()),
-      fetch('https://wps-staff-hub.pgallivan.workers.dev/api/notices').then(r=>r.json()),
-      fetch('https://wps-staff-hub.pgallivan.workers.dev/api/bells').then(r=>r.json()),
+      fetch('/api/timetable').then(r=>r.json()),
+      fetch('/api/notices').then(r=>r.json()),
+      fetch('/api/bells').then(r=>r.json()),
     ]);
     sharedData.timetable=tt.data||[];
     sharedData.notices=notices.data||[];
@@ -749,7 +749,7 @@ async function addTimetableSlot(){
     year_level:document.getElementById('ttYear').value,
     updated_by:user?.email||''
   };
-  const res=await fetch('https://wps-staff-hub.pgallivan.workers.dev/api/timetable',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Email':user?.email||'','X-Admin-PIN':sessionStorage.getItem('wps_apin')||''},body:JSON.stringify(data)});
+  const res=await fetch('/api/timetable',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Email':user?.email||'','X-Admin-PIN':sessionStorage.getItem('wps_apin')||''},body:JSON.stringify(data)});
   const d=await res.json();
   if(!d.ok){toast('Failed to save — check admin access','❌');return;}
   sharedData.timetable.push(data);
@@ -766,7 +766,7 @@ async function deleteSlot(id){
 
 async function clearTimetable(){
   if(!confirm('Clear ENTIRE timetable? All staff will lose it.'))return;
-  const res=await fetch('https://wps-staff-hub.pgallivan.workers.dev/api/timetable/all',{method:'DELETE',headers:{'X-Admin-Email':user?.email||'','X-Admin-PIN':sessionStorage.getItem('wps_apin')||''}});
+  const res=await fetch('/api/timetable/all',{method:'DELETE',headers:{'X-Admin-Email':user?.email||'','X-Admin-PIN':sessionStorage.getItem('wps_apin')||''}});
   sharedData.timetable=[];renderTimetable();toast('Timetable cleared');
 }
 
@@ -1073,7 +1073,7 @@ function renderNotices(){
 async function postNotice(){
   const text=document.getElementById('noticeText').value.trim();if(!text){toast('Enter notice text','⚠️');return;}
   const data={id:'n_'+Date.now(),text,priority:document.getElementById('noticePri').value,from_name:user?.name?.split(' ')[0]||'Staff',from_email:user?.email||'',expires_at:document.getElementById('noticeExpiry').value||null};
-  const res=await fetch('https://wps-staff-hub.pgallivan.workers.dev/api/notices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const res=await fetch('/api/notices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const d=await res.json();
   if(d.ok){sharedData.notices.unshift(data);document.getElementById('noticeText').value='';closeModal('addNoticeModal');renderNotices();renderZapNotices();toast('Notice posted to all staff! 📢');}
   else toast('Failed to post notice','❌');
