@@ -1,225 +1,204 @@
-# WPS Staff Hub — Single Source of Truth Handover
+# WPS Hub — Handover
 
-**Date created:** 2026-04-27 (recovered from scattered references)
-**Last recovery:** 2026-04-27 10:33 UTC — v3 hub restored from scratch after migration overwrote it
-**Source-of-truth (since 2026-04-27 10:54 UTC):** [`LuckDragonAsgard/wps-hub/docs/HANDOVER.md`](https://github.com/LuckDragonAsgard/wps-hub/blob/main/docs/HANDOVER.md). The Drive copy at `G:\My Drive\🏰 ASGARD\01 Products\WPS Staff Hub\WPS-STAFF-HUB-HANDOVER-EOD.md` is now a redirect stub.
-**Project alias used in Cowork:** "WPS Hub"
-
----
-
-## ✅ RECOVERY COMPLETE — wps.carnivaltiming.com is back online (2026-04-27 10:33 UTC)
-
-The migration broke the v3 hub at 06:46 UTC. Recovered four hours later. Full report at the bottom of this doc.
-
-| Endpoint | Before recovery | After recovery |
-|---|---|---|
-| `https://wps.carnivaltiming.com/` | 200 — wrong product, broken images | **200 — WPS Hub v3, correct frontend** |
-| `https://wps.carnivaltiming.com/api/health` | 200 with HTML body (broken) | **200 `{"ok":true,"version":"v3-restored-2026-04-27","has_db":true}`** |
-| `https://wps.carnivaltiming.com/api/bells` | 200 with HTML body | **200 — 10 bell times, all preserved** |
-| `https://wps.carnivaltiming.com/api/users` | 200 with HTML body | **200 — Mat + Paddy, both admins, preserved** |
-| `POST /api/auth/verify-admin` | non-functional | **works — PIN 9999 + admin email** |
-| `POST /api/timetable` (admin) | non-functional | **works — round-trip insert/delete confirmed** |
-| `POST /api/notices` | non-functional | **works — round-trip confirmed** |
-
-**Nothing in D1 was lost.** The Vercel→CF migration only stripped the worker's binding to the database, not the database itself. Bell times (10 rows) and admin users (2 rows) read back identical to what was seeded on 2026-04-20.
+**Live:** https://wps.carnivaltiming.com (will move to https://schoolstaffhub.com.au once Mat-friendly domain is registered)
+**Worker:** `wps-hub-v3` on Cloudflare (Luck Dragon Main account `a6f47c17811ee2f8b6caeb8f38768c20`)
+**D1:** `wps-hub-db` uuid `d89d5e1b-a9b0-49ad-800d-0cee8f2925b3`
+**Repo (source-of-truth):** https://github.com/LuckDragonAsgard/wps-hub
+**Drive footprint:** zero
 
 ---
 
-> ⚠️ **Two different products are both called "WPS Hub" / "WPS Staff Hub".** Always confirm which one the conversation is about.
+## What the product is
 
-## Two products, both called "WPS Hub"
+A school management PWA — iDoceo replacement for primary schools. Two layers:
 
-| | **A. WPS Staff Hub** (CRT/Absence app) | **B. WPS Hub v3** (school management — Paddy's growth product) |
-|---|---|---|
-| Repo | `LuckDragonAsgard/wps-staff-hub` | `LuckDragonAsgard/wps-hub` |
-| Created | 2026-03-25 | 2026-04-21 |
-| Last push | **2026-04-27** (security fix — Turso token strip) | **2026-04-27** (full source migration from Drive) |
-| Stack | Express + Turso + Twilio + SendGrid (Node, Railway-ready) | Single 71KB HTML PWA + CF Worker w/ D1 backend |
-| Purpose | Staff submit absences → system books CRTs over SMS/email | Full iDoceo replacement — classes, roll, gradebook, random picker, lesson planner, school-wide timetable + notices via D1 |
-| Hosting timeline | Render → Vercel → snapshot to CF Worker | CF Worker `wps-staff-hub` v3-v5 → overwritten by migration on 2026-04-27 → restored on 2026-04-27 as new worker `wps-hub-v3` |
-| **Current live status** | **Parked.** Worker `wps-staff-hub` still serves the broken frontend snapshot at its `*.workers.dev` URL only — no custom domain, no API. Repo HEAD has the leaked token stripped but git history still contains it (Turso dashboard rotation pending). | **✅ LIVE at `wps.carnivaltiming.com`** via `wps-hub-v3` worker. Full API, D1 wired (`wps-hub-db`, uuid `d89d5e1b-...`), admin PIN secret bound. Mat + Paddy are seeded admins. |
-| Asgard Project Hub D1 row | id=21, status=parked | id=51, status=live |
+- **Per-school shared (D1):** bell times, notices, school events, school timetable, admin user list. Synced via the Worker's `/api/*` endpoints.
+- **Per-teacher local (browser storage only):** class rolls, gradebook marks, student notes, random picker, lesson planner. Never leaves the device — student-PII safe.
+
+Sell-to-schools positioning: each school gets its own row in the `schools` D1 table, isolated data, optional own subdomain.
 
 ---
 
-## Live URLs (working as of 2026-04-27 10:33 UTC, post-recovery)
-
-| URL | Bound to worker | What it serves | Status |
-|---|---|---|---|
-| **https://wps.carnivaltiming.com/** | `wps-hub-v3` | **Product B v3 — full school management hub w/ working API + D1** | ✅ 200, restored |
-| **https://wps-hub-v3.pgallivan.workers.dev/** | `wps-hub-v3` | Same as above (workers.dev mirror) | ✅ 200 |
-| **https://wps-staff-hub.pgallivan.workers.dev/** | `wps-staff-hub` (orphaned) | Product A's broken frontend snapshot — kept as backup, no custom domain bound | 200 but broken (use only for reference) |
-
-The backend caveat from earlier is **resolved**. `/api/health`, `/api/bells`, `/api/notices`, `/api/timetable`, `/api/users`, `/api/events`, `/api/auth/verify-admin`, `POST /api/notices`, `POST /api/timetable` (admin) all return JSON, all read+write the live D1.
-
----
-
-## Where the code lives
-
-### Product B (WPS Hub v3 — live)
-
-| File | Path | Notes |
-|---|---|---|
-| **Frontend** | [`index.html`](https://github.com/LuckDragonAsgard/wps-hub/blob/main/index.html) — 71 KB | Single-file PWA, vanilla JS, 🏫 emoji logo, no external assets. All `/api/*` calls relative. |
-| **Worker (API)** | [`worker.js`](https://github.com/LuckDragonAsgard/wps-hub/blob/main/worker.js) — 8.8 KB | Reconstructed v3 worker. Routes `/api/*` against D1, serves `index.html` for everything else. |
-| **Deploy config** | [`wrangler.toml`](https://github.com/LuckDragonAsgard/wps-hub/blob/main/wrangler.toml) | Binding: D1 `wps-hub-db` uuid `d89d5e1b-...`. PIN secret set out-of-band. |
-| **CI template** | [`docs/github-actions-deploy.yml`](https://github.com/LuckDragonAsgard/wps-hub/blob/main/docs/github-actions-deploy.yml) | Auto-deploy template. Not yet wired (needs PAT with `workflow` scope, or use CF Workers Builds in dashboard). |
-| **Pre-recovery snapshot** | [Release `pre-recovery-2026-04-27`](https://github.com/LuckDragonAsgard/wps-hub/releases/tag/pre-recovery-2026-04-27) | Pinned: broken-snapshot HTML, Product A's static assets, all 6 worker version metadata blobs. |
-
-### Product A (WPS Staff Hub CRT — parked)
-
-| Layer | Location | Notes |
-|---|---|---|
-| **Repo** | https://github.com/LuckDragonAsgard/wps-staff-hub | Public, default branch `main`, last push 2026-04-27 (security fix). |
-| **Frontend** | `public/index.html` (310 KB single file) + `public/sw.js`, `manifest.json`, icons | Vanilla JS PWA. Mammoth.js loaded for .docx ingest. |
-| **Backend** | `server.js` (181 KB) | Node 18 Express. 40+ `/api/*` routes (login, login/crt, staff CRUD, etc.). |
-| **DB schema** | `schema.sql` | Tables: `users`, `crts`, `crt_preferences`, `crt_unavailable`, `absences`, `notifications`, `sms_log`, `email_log`. |
-| **Container** | `Dockerfile` (Node 18 slim) + `railway.json` | Wired for Railway. Not currently deployed. |
-
-**Old repo path:** `https://github.com/PaddyGallivan/wps-staff-hub` — 301-redirects to LuckDragonAsgard.
-
----
-
-## Database — Turso (libSQL) cloud
+## Architecture
 
 ```
-TURSO_URL = libsql://wps-staff-hub-paddygallivan.aws-us-east-1.turso.io
+                                                 ┌─────────────────────┐
+        wps.carnivaltiming.com  ─────────┐       │   Cloudflare D1     │
+        schoolstaffhub.com.au   ─────────┤       │   wps-hub-db        │
+        (per-school subdomain)  ─────────┤       │   ──────────────    │
+                                         ▼       │   schools           │
+                          ┌──────────────────┐   │   users             │
+                          │  CF Worker       │   │   bell_times        │
+                          │  wps-hub-v3      │ ──→   notices           │
+                          │  ──────────────  │   │   timetable         │
+                          │  resolveSchool() │   │   school_events     │
+                          │  /api/* routes   │   │   admin_log         │
+                          │  serves index.html │  │   (all school_id)   │
+                          └──────────────────┘   └─────────────────────┘
+                                         │
+                                         ▼
+                          ┌──────────────────┐
+                          │  PWA frontend    │
+                          │  (single 71KB    │
+                          │   HTML, vanilla  │
+                          │   JS, embedded   │
+                          │   in worker)     │
+                          └──────────────────┘
 ```
 
-🚨 **CREDENTIAL LEAK — partially mitigated 2026-04-27 10:41 UTC.** A Turso JWT token was hardcoded as a default in `server.js` line ~17 of the **public** GitHub repo. **HEAD has been patched** (commit [`90c9148`](https://github.com/LuckDragonAsgard/wps-staff-hub/commit/90c9148329747f6d45057851ec305ab3374f503f)). The token is **still present in git history**. **Full mitigation requires rotating the token on the Turso dashboard** — manual action.
-
-The CF Worker has **no** Turso secret bound, so the Turso DB is currently orphaned from anything live.
-
----
-
-## Cloudflare resources
-
-```
-Account:   Luck Dragon (Main)  a6f47c17811ee2f8b6caeb8f38768c20
-
-Workers:
-  wps-hub-v3      bindings WPS_DB (D1) + WPS_ADMIN_PIN (secret)
-                  bound to: wps.carnivaltiming.com + wps-hub-v3.pgallivan.workers.dev
-                  source-of-truth: github.com/LuckDragonAsgard/wps-hub
-  wps-staff-hub   bindings none — broken Product-A snapshot
-                  bound to: wps-staff-hub.pgallivan.workers.dev only
-
-D1:
-  wps-hub-db      uuid d89d5e1b-a9b0-49ad-800d-0cee8f2925b3
-                  6 user tables (admin_log, bell_times, notices, school_events, timetable, users)
-                  + sqlite_sequence + _cf_KV (CF internal)
-                  10 bell_times rows + 2 admin users seeded
-
-Custom domains:
-  wps.carnivaltiming.com → wps-hub-v3   cert id 4285582d-5ffe-4af0-ad10-0b76d388b0ae
-```
+School resolution priority (in `worker.js` → `resolveSchool`):
+1. `X-School-Id` header (admin/dev override)
+2. `?school=` query param
+3. Hostname → `schools.domain` lookup
+4. Fallback to school `wps`
 
 ---
 
-## 🚨 RESOLVED — The migration overwrote the v3 hub (diagnosed + fixed 2026-04-27)
+## What got done in this session (2026-04-27)
 
-> Historical record. Resolution: see the "RECOVERY COMPLETE" banner at the top of this doc and the "Recovery log" section below.
+### Phase 1 — Recovery (06:46 broke → 10:33 restored)
+The Vercel→CF migration overwrote the v5 worker (which was running Product B v3 with D1 + secret bindings) with a static snapshot of Product A's frontend. Restored by:
+- Backing up everything pre-touch
+- Verifying D1 was intact via a probe worker
+- Reconstructing the v3 worker code from the API surface in the v3 frontend HTML
+- Deploying as new worker `wps-hub-v3` with the D1 + PIN bindings rewired
+- Repointing `wps.carnivaltiming.com` to it
 
-**Worker version history of `wps-staff-hub`** (one worker, two completely different products):
+### Phase 2 — Source migration off Drive (10:42 → 12:00)
+- Pushed Product B source to `LuckDragonAsgard/wps-hub` (worker.js, index.html, wrangler.toml, README.md, .gitignore)
+- Pinned pre-recovery backup as GitHub release `pre-recovery-2026-04-27` with 3 attachments
+- Pushed Product A staff guides into `LuckDragonAsgard/wps-staff-hub/docs/`
+- Stripped the leaked Turso default token from public Product A repo HEAD (commit 90c9148)
+- Updated Asgard Project Hub D1 (rows #21 + #51)
+- **Deleted entire `🏰 ASGARD/01 Products/WPS Staff Hub/` Drive folder**
 
-| Version | When | Bindings | What it was |
-|---|---|---|---|
-| v1 | 2026-04-20 11:37 UTC | none | Initial v3 frame |
-| v2 | 2026-04-20 12:47 UTC | none | Iteration |
-| v3 | 2026-04-20 13:22 UTC | **WPS_DB** (D1 `d89d5e1b-...`) | D1 wired |
-| v4 | 2026-04-20 14:51 UTC | WPS_DB | More API routes |
-| v5 | 2026-04-20 14:53 UTC | WPS_DB + **WPS_ADMIN_PIN** (secret) | **Full v3 with admin PIN — the working build** |
-| v6 | **2026-04-27 06:46 UTC** | **none — bindings stripped** | Vercel→CF migration replaced everything with a 310KB static snapshot of the OLDER CRT/absence app's `public/index.html`. **This was the bug.** |
-
----
-
-## ✅ RESOLVED — Images not loading (diagnosed + fixed 2026-04-27)
-
-> Historical record. No longer applies — `wps.carnivaltiming.com` now serves Product B (v3 hub), which references zero local images (uses 🏫 emoji as logo).
-
----
-
-## Open / outstanding work
-
-**For Product B (the v3 hub now live at `wps.carnivaltiming.com`) — no urgent items, only product growth:**
-
-1. **Wire auto-deploy.** Either (a) connect this repo via CF dashboard → Workers → wps-hub-v3 → Settings → Builds (no PAT needed), or (b) `cp docs/github-actions-deploy.yml .github/workflows/deploy.yml` from a clone with a PAT that has `workflow` scope.
-2. **Get Mat using it.** v3 PWA login + admin PIN (9999) work. Schedule a 10-min walkthrough.
-3. **Rotate the WPS_ADMIN_PIN** from `9999` to a stronger value once Mat has the new PIN. PUT to `/accounts/{acc}/workers/scripts/wps-hub-v3/secrets`.
-4. **Move off `wps.carnivaltiming.com`** to a school-neutral domain (`staffhub.com.au`, `schoolstaffhub.com.au`, etc.) before pitching to other schools.
-5. **CSV class import flow.** Frontend has the UI; verify it persists to D1 (or stays client-side for student-PII reasons).
-6. **Per-school onboarding.** D1 has hardcoded WPS bell times + WPS admins. To sell to other schools, add a `schools` table + per-school scoping.
-
-**For Product A (the CRT/absence app — currently parked):**
-
-1. **Rotate the Turso token** on the Turso dashboard.
-2. **Decide: resurrect or retire?** Resurrect = Railway via existing `Dockerfile` + `railway.json`. Retire = archive the repo and delete the `wps-staff-hub` Cloudflare Worker.
-3. **End-user docs:** the Product A staff guides are referenced in `docs/README.md` (Drive). Stay in Drive folder `1Vw8wpgqOAwZYmBn6_bK1nhIbqSu_IzaO` until Product A's status is decided.
+### Phase 3 — Multi-tenancy + domain (12:14 → )
+- D1 migration: added `schools` table, `school_id` columns on every per-school table, `super_admin` flag on users, indexes
+- Seeded WPS as the first school; backfilled all existing rows
+- Promoted Paddy to super_admin
+- Rewrote worker.js as multi-tenant — every query now scoped by school resolved from hostname/header
+- Added super-admin endpoints: `GET/POST /api/_super/schools`, `POST /api/_super/promote-admin`
+- Verified isolation: created a `demo` school, confirmed reads/writes don't leak across schools, confirmed Mat (non-super) is rejected from super endpoints
+- Pre-staged `schoolstaffhub.com.au`: zone added in CF, NS pair issued, apex+www bound to the worker, schools row updated
+- Pushed updated worker + new `SCHEMA.sql` to repo
 
 ---
 
-## 📜 Recovery log — 2026-04-27
+## What you (Paddy) still need to do manually
 
-### Phase 1: Restore wps.carnivaltiming.com (10:24 → 10:33 UTC)
+### 1. Register `schoolstaffhub.com.au` (5 min)
 
-1. **Backed up everything first** to a Drive folder, then later pinned to GitHub release `pre-recovery-2026-04-27`.
-2. **Tried six methods to recover v5 worker source** from CF version history. All failed (token scope too narrow). Conclusion: rebuild from scratch.
-3. **Deployed `wps-hub-probe`** with the D1 binding to confirm the database wasn't deleted. Found 10 bell times + 2 admins intact.
-4. **Reconstructed v3 worker code** by reverse-engineering API surface from `LuckDragonAsgard/wps-hub/index.html` and the D1 schema.
-5. **Embedded the v3 frontend HTML** with relative `/api/*` URLs.
-6. **Deployed as new worker `wps-hub-v3`** with WPS_DB + WPS_ADMIN_PIN bindings. Kept old `wps-staff-hub` worker as backup.
-7. **Repointed `wps.carnivaltiming.com`** → `wps-hub-v3`. New SSL cert auto-issued.
-8. **Smoke-tested everything**, including write round-trips. Cleaned up probe worker.
+Per the standing playbook for `.com.au` domains — VentraIP via vipcontrol.com.au:
 
-### Phase 2: Source migration off Drive (10:42 → 10:55 UTC)
+1. Log into https://vipcontrol.com.au
+2. Domains → Register new → `schoolstaffhub.com.au` (~$20/yr)
+3. Once registered: Manage → DNS / Nameservers → Custom nameservers → set:
+   - `coraline.ns.cloudflare.com`
+   - `renan.ns.cloudflare.com`
+4. Wait 5–60 min for NS propagation. CF zone activates automatically.
+5. Verify: `dig +short NS schoolstaffhub.com.au @1.1.1.1` should return the CF NS pair, then `https://schoolstaffhub.com.au/` will serve the hub.
 
-9. **Moved the staff guide pointer doc** to `01 Products/WPS Staff Hub/docs/README.md`.
-10. **Stripped the leaked Turso default token** from `LuckDragonAsgard/wps-staff-hub/server.js` HEAD. (Git history still has it; Turso dashboard rotation pending.)
-11. **Updated Asgard Project Hub D1**: row #21 (Product A) marked parked, new row #51 (Product B v3) inserted with current state.
-12. **Pushed Product B source to repo** `LuckDragonAsgard/wps-hub`: replaced index.html with relative-URLs version, added worker.js, wrangler.toml, README.md, .gitignore, docs/github-actions-deploy.yml. Removed obsolete vercel.json.
-13. **Pinned pre-recovery backup** as GitHub release `pre-recovery-2026-04-27` with three asset attachments (broken HTML snapshot, Product A static assets, worker version metadata).
-14. **Canonicalised this handover** into the repo at `docs/HANDOVER.md`. Drive copy is now a redirect stub.
+The worker is already bound. SSL cert will auto-issue. **Nothing else to do once NS swap completes.**
 
-**What was preserved vs lost:**
+### 2. Wire CF Workers Builds for auto-deploy (3 min)
 
-| | Status |
-|---|---|
-| D1 database `wps-hub-db` | ✅ Preserved 100% |
-| All 6 D1 tables and their contents | ✅ Preserved |
-| 10 seeded bell times | ✅ Preserved |
-| Mat + Paddy admin users | ✅ Preserved |
-| v3 frontend HTML | ✅ In repo (`index.html`) |
-| v3 worker code | ⚠️ Original v5 unrecoverable; rebuilt from API surface. Behaviour matches frontend's expectations. |
-| Admin PIN | ✅ `9999` (original from Apr 20). Rotate via Workers secrets API. |
-| Custom domain SSL cert | ✅ New cert auto-issued during rebind |
-| Static assets from Product A | ✅ Pinned in GitHub release `pre-recovery-2026-04-27` |
-| Worker version history (Product B v1-v6 metadata) | ✅ Pinned in same GitHub release |
-| Broken-HTML snapshot from the bad migration | ✅ Pinned in same GitHub release |
-| Drive backup folder | 🗑 Safe to delete (everything pinned to GitHub release) |
-| Drive `worker-v3-restored-2026-04-27` folder | 🗑 Safe to delete (in repo as `worker.js`, `index.html`, `wrangler.toml`) |
+The dashboard step that needs your hands (CF API doesn't expose this):
 
----
+1. https://dash.cloudflare.com → Workers & Pages → `wps-hub-v3`
+2. Settings tab → **Build** section
+3. "Connect to Git" → authorise GitHub for the Cloudflare app on `LuckDragonAsgard/wps-hub`
+4. Branch: `main`. Build command: leave blank. Deploy command: `wrangler deploy`. Root: leave blank.
+5. Save. Future pushes to `main` deploy automatically.
 
-## Quick verification commands
+### 3. Rotate `WPS_ADMIN_PIN` (1 min) — when Mat is ready for a real PIN
 
 ```bash
-# Token + account
-export CF_TOKEN=cfut_REDACTED
-export CF_ACC=a6f47c17811ee2f8b6caeb8f38768c20
+# Replace 9999 with the new PIN
+curl -X PUT \
+  -H "Authorization: Bearer <CF_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"WPS_ADMIN_PIN","text":"<NEW_PIN>","type":"secret_text"}' \
+  "https://api.cloudflare.com/client/v4/accounts/a6f47c17811ee2f8b6caeb8f38768c20/workers/scripts/wps-hub-v3/secrets"
+```
 
-# Worker exists & latest deployment
-curl -s -H "Authorization: Bearer $CF_TOKEN" \
-  "https://api.cloudflare.com/client/v4/accounts/$CF_ACC/workers/services/wps-hub-v3/environments/production" | jq '.result.script | {modified_on, has_modules, handlers}'
+Or via dashboard: Workers → wps-hub-v3 → Settings → Variables and Secrets → edit `WPS_ADMIN_PIN`.
 
-# Custom domain bindings
-curl -s -H "Authorization: Bearer $CF_TOKEN" \
-  "https://api.cloudflare.com/client/v4/accounts/$CF_ACC/workers/domains?service=wps-hub-v3" | jq '.result[] | {hostname, enabled}'
+### 4. Walk Mat through the onboarding pack (10 min)
 
-# Repo head
-curl -s "https://api.github.com/repos/LuckDragonAsgard/wps-hub" | jq '{pushed_at, size, default_branch}'
+[`docs/MAT-ONBOARDING.md`](MAT-ONBOARDING.md) covers what he needs.
 
-# Live HTTP
-for u in https://wps.carnivaltiming.com/ https://wps.carnivaltiming.com/api/health https://wps-hub-v3.pgallivan.workers.dev/api/bells; do
-  echo -n "$u → "; curl -s -o /dev/null -w "%{http_code}\n" --max-time 5 "$u"
-done
+---
+
+## API surface (multi-tenant v4)
+
+All responses are JSON envelope `{ok, data?, error?}`. School resolved per request from hostname (or `X-School-Id` header for testing/admin override).
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET`  | `/api/health` | open | `{ok, version, has_db, school, school_name}` |
+| `GET`  | `/api/school` | open | Current school resolution |
+| `POST` | `/api/auth/verify-admin` | `{pin, email}` | Returns `{ok, role, super_admin, school}` |
+| `GET`  | `/api/bells` / `/api/notices` / `/api/timetable` / `/api/timetable/all` / `/api/users` / `/api/events` | open (school-scoped) | List |
+| `POST` | `/api/notices` | open | Create notice |
+| `DELETE` | `/api/notices/:id` | open | Delete notice |
+| `POST` | `/api/timetable` | `X-Admin-Email` + `X-Admin-PIN` | Bulk upsert (`{rows:[…], replace:bool}` or array) |
+| `DELETE` | `/api/timetable/:id` | admin | Delete row |
+| `DELETE` | `/api/timetable/all` | admin | Clear all (school-scoped) |
+| `GET`  | `/api/admin/log` | admin | Audit trail |
+| `GET`  | `/api/_super/schools` | super-admin (`X-Super-Admin-Email` + `X-Super-Admin-PIN`) | List all schools |
+| `POST` | `/api/_super/schools` | super-admin | Create new school `{id, name, slug?, domain?}` |
+| `POST` | `/api/_super/promote-admin` | super-admin | Promote user to admin in a school `{school_id, email, name?}` |
+
+---
+
+## Schools state
+
+| id | name | domain | created |
+|---|---|---|---|
+| `wps` | Williamstown Primary School | schoolstaffhub.com.au | 2026-04-20 |
+| `demo` | Demo Primary School | demo.wps.carnivaltiming.com | 2026-04-27 |
+
+(`wps` data: 10 bell times + 2 admin users + the rest empty. `demo` data: 0 across the board, kept for testing isolation.)
+
+---
+
+## Repo files
+
+| File | Purpose |
+|---|---|
+| `index.html` | 71 KB single-file PWA frontend |
+| `worker.js` | CF Worker — multi-tenant routing + API |
+| `wrangler.toml` | Deploy config (D1 binding) |
+| `SCHEMA.sql` | Authoritative D1 schema for `wps-hub-db` |
+| `README.md` | Setup + API + deployment guide |
+| `docs/HANDOVER.md` | This file |
+| `docs/MAT-ONBOARDING.md` | What Mat needs to know |
+| `docs/github-actions-deploy.yml` | Template GH Actions workflow (not yet wired — see CF Workers Builds path above) |
+| `.gitignore` | Standard ignores |
+| Release `pre-recovery-2026-04-27` | Pinned snapshot of broken state for reference |
+
+---
+
+## Open / next
+
+- Get Mat using it this week. Watch what he hits and what he finds confusing.
+- After 1–2 weeks of WPS use, build the per-school onboarding flow (currently new schools require a `POST /api/_super/schools` from a super-admin — needs a UI).
+- CSV class roster import — frontend has the UI, verify it persists where intended (probably client-side to keep student PII off D1).
+- Marketing/landing page — when ready, host at `schoolstaffhub.com.au/about` or similar.
+
+---
+
+## Quick verification
+
+```bash
+# Live
+curl -s https://wps.carnivaltiming.com/api/health | jq
+curl -s https://wps.carnivaltiming.com/api/users | jq '.data | length'
+# Admin auth
+curl -s -X POST -H "Content-Type: application/json" \
+  -d '{"pin":"9999","email":"paddy.gallivan@education.vic.gov.au"}' \
+  https://wps.carnivaltiming.com/api/auth/verify-admin | jq
+
+# After NS swap on schoolstaffhub.com.au:
+curl -s https://schoolstaffhub.com.au/api/health | jq
 ```
